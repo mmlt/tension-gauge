@@ -1,11 +1,3 @@
-# SPDX-FileCopyrightText: 2021 ladyada for Adafruit Industries
-# SPDX-License-Identifier: MIT
-
-"""
-This test will initialize the display using displayio and draw a solid white
-background, a smaller black rectangle, and some white text.
-"""
-
 import board, busio, microcontroller
 import digitalio, displayio, terminalio
 import time
@@ -27,38 +19,19 @@ HEIGHT = 32
 display_bus = displayio.I2CDisplay(i2c, device_address=0x3C)
 display = adafruit_displayio_ssd1306.SSD1306(display_bus, width=WIDTH, height=HEIGHT)
 
-# Make the display context
+
+# Display
 splash = displayio.Group()
-display.show(splash)
-
-# # Draw boarder
-# color_bitmap = displayio.Bitmap(WIDTH, HEIGHT, 1)
-# color_palette = displayio.Palette(1)
-# color_palette[0] = 0xFFFFFF  # White
-
-# bg_sprite = displayio.TileGrid(color_bitmap, pixel_shader=color_palette, x=0, y=0)
-# splash.append(bg_sprite)
-
-# # a smaller inner rectangle
-# BORDER = 5
-# inner_bitmap = displayio.Bitmap(WIDTH - BORDER * 2, HEIGHT - BORDER * 2, 1)
-# inner_palette = displayio.Palette(1)
-# inner_palette[0] = 0x000000  # Black
-# inner_sprite = displayio.TileGrid(
-#     inner_bitmap, pixel_shader=inner_palette, x=BORDER, y=BORDER
-# )
-# splash.append(inner_sprite)
-
-# Draw a label
 text_area = label.Label(
     terminalio.FONT, scale=3, color=0xFFFFFF, x=0, y=HEIGHT // 2 - 1
 )
 splash.append(text_area)
-#display.refresh()
+display.show(splash)
 
-# Led
-# led = digitalio.DigitalInOut(board.LED)
-# led.direction = digitalio.Direction.OUTPUT
+
+def on_display(string):
+    text_area.text = string
+
 
 # Keypad
 keys = keypad.Keys((board.GP12, board.GP11, board.GP10), value_when_pressed=False, pull=True)
@@ -66,30 +39,41 @@ keys = keypad.Keys((board.GP12, board.GP11, board.GP10), value_when_pressed=Fals
 # Sensor
 force = hx711.HX711(sda=board.GP1, scl=board.GP0)
 
-# Build Menu
-
+# Menu
 x = 0
-def counter():
+def counter() -> str:
+    """
+    Running counter value (for testing).
+    :return: ever incrementing value.
+    """
     global x
     x += 1
     return f"{x}"
 
 
-def raw():
+def raw() -> str:
+    """
+    Display load cell readings.
+    :return: raw load cell value.
+    """
     v, ok = force.read_raw()
     if ok:
         return f"{v}"
     return "---"
 
 
-def kg():
+def kg() -> str:
+    """
+    Display tension in kg.
+    :return: load cell tension in kg.
+    """
     v, ok = force.read()
     if ok:
         return f"{v}"
     return "---"
 
 
-def tare():
+def tare() -> str:
     """
     Zero the scale.
     return message to be displayed
@@ -98,16 +82,12 @@ def tare():
     if ok:
         force.offset(v)
         return "OK"
-    # force.ratio()
+    # TODO set force.ratio() ?
     return "error"
 
 
-def on_display(string):
-    text_area.text = string
-
-
 mm = menu.MenuManager(on_display, menu.Menu(
-    ["raw", "Kg", "tare", "tstcnt"],
+    ["raw", "Kg", "tare", "tst cnt"],
     [menu.show(raw), menu.show(kg), menu.enter(menu.Cmd(tare)), menu.show(counter)]))
 
 
@@ -119,22 +99,5 @@ while True:
 
     event = keys.events.get()
     mm.poll10hz(event)
-
-    # temperature = -1
-    # if button_a.value:
-    #     v, ok = force.read_raw()
-    #     if ok:
-    #         temperature = v
-    # else:
-    #     temperature =  round(microcontroller.cpu.temperature,1)
-    #     # led.value = False
-    #
-    # temperature_string = f"{temperature}"
-    # text_area.text = temperature_string
-    #
-    # event = keys.events.get()
-    # # event will be None if nothing has happened.
-    # if event:
-    #     print("key", event.key_number, event.pressed)
 
 
