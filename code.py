@@ -27,7 +27,7 @@ display = adafruit_displayio_ssd1306.SSD1306(display_bus, width=WIDTH, height=HE
 splash = displayio.Group()
 text_area = label.Label(
     #terminalio.FONT, scale=3, color=0xFFFFFF, x=0, y=HEIGHT // 2 - 1
-    terminalio.FONT, scale=2, color=0xFFFFFF, x=0, y=HEIGHT // 2 - 1
+    terminalio.FONT, scale=2, color=0xFFFFFF, x=0, y=HEIGHT // 2 - 1 # 10 chars wide
 )
 splash.append(text_area)
 display.show(splash)
@@ -43,6 +43,15 @@ keys = keypad.Keys((board.GP12, board.GP11, board.GP10), value_when_pressed=Fals
 # Sensor
 force = hx711.HX711(sda=board.GP1, scl=board.GP0)
 
+# Sensor calibration.
+# wire diameter: [breaking force in kg, sensor units to kg]
+force_table={
+    6: [3028, 1000],
+    7: [3850, 6640],
+    8: [5040, 1000],
+    10: [7870, 1000],
+}
+
 # Menu
 def raw() -> str:
     """
@@ -54,18 +63,25 @@ def raw() -> str:
         return f"{v}"
     return "---"
 
-
-def kg() -> str:
+def percentage(wire) -> str:
     """
-    Display tension in kg.
+    Display percentage of breaking force and force in kg.
     :return: display string
     """
-    v, ok = force.read()
-    if ok:
-        v /= 200 # 7mm scale
-        return  "{:2.1f}V".format(v)
-    return "---"
+    ft = force_table.get(wire, None)
+    if ft is None:
+        return lambda: f"err: {wire}"
+    breaking = ft[0]
+    factor = ft[1]
+    def d():
+        v, ok = force.read()
+        if ok:
+            v /= factor
+            p = v / breaking
+            return f"{p:.0%} {v:3.1f}"
+        return "---"
 
+    return d
 
 def tare() -> str:
     """
@@ -76,7 +92,7 @@ def tare() -> str:
     if ok:
         force.offset(v)
         return "OK"
-	# TODO set force.ratio() ?
+    # TODO set force.ratio() ?
     return "error"
 
 
@@ -100,8 +116,12 @@ def temperature() -> str:
     return "{:2.1f}C".format(temp) 
 
 mm = menu.MenuManager(on_display, menu.Menu(
-    ["raw", "Kg", "tare", "batt", "temp"],
-    [menu.show(raw), menu.show(kg), menu.enter(menu.Cmd(tare)), menu.show(battery), menu.show(temperature)]))
+    ["Tare",
+     "7mm 3850", "10mm 7870", #TODO get from table
+     "Batt", "Temp", "Raw"],
+    [menu.enter(menu.Cmd(tare)),
+     menu.show(percentage(7)), menu.show(percentage(10)),
+     menu.show(battery), menu.show(temperature), menu.show(raw)]))
 
 
 print("Running - Press Ctrl+C to get into the REPL")

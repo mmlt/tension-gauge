@@ -1,4 +1,5 @@
 import digitalio
+import time
 
 
 class HX711:
@@ -25,6 +26,8 @@ class HX711:
         self._config = config
         self._offset = offset
         self._ratio = ratio
+        self._raw = 0
+        self._smoothing = 0
         self._queue = []
     
     QUEUE_SIZE = const(5)
@@ -55,7 +58,14 @@ class HX711:
         if self._io_data.value:
             # no data available
             return
+        time.sleep(0.01)
+        if self._io_data.value:
+            # no data available
+            return
 
+        # When the SCK pin changes from low to high and stays at high for longer than 60µs the HX711
+        # enters power down mode. When SCK returns to low the chip will reset and enter normal operation mode.
+        # After a reset or power-down event, input selection is default to Channel A with a gain of 128.
         d = 0
         for _ in range(24 + self._config):
             self._io_clk.value = True
@@ -64,11 +74,32 @@ class HX711:
         # discard config bits
         d = d >> self._config
 
+        # The output data will be saturated at 800000h (MIN) or 7FFFFFh (MAX)
+
         # extend sign of 24bits 2-complements value
         if d > 0x7FFFFF:
             d -= 0x1000000
 
-        self._queue.append(d)
+        # limit impact of fluke readings
+        LIMIT = 100000
+        if d > self._raw + LIMIT:
+            d = self._raw + LIMIT
+        elif d < self._raw - LIMIT:
+            d = self._raw - LIMIT
+
+        # increase smoothing when data stays within threshold
+        if abs(d - self._raw) < 500:
+            self._smoothing += 1
+        else:
+            self._smoothing -= 1
+
+        if self._smoothing > 10:
+            self._smoothing = 10
+        elif self._smoothing < 0:
+            self._smoothing = 0
+
+        self._raw = (self._raw * self._smoothing + d) // (self._smoothing + 1)
+        self._queue.append(self._raw)
 
         if len(self._queue) > QUEUE_SIZE:
             self._queue.pop(0)
@@ -85,7 +116,7 @@ class HX711:
         for v in self._queue:
             r += v
 
-        r /= len(self._queue)
+        r //= len(self._queue)
 
         return r, True
 
